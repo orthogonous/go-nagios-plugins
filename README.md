@@ -2,6 +2,7 @@ go-nagios-plugins
 ============
 
 A collection of nagios plugins written in go.
+The base plugins are based off the [go_nagios](http://github.com/newrelic/go_nagios) framework.
 
 Current plugins includes: 
 
