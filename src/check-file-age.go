@@ -1,8 +1,12 @@
-package nagios
+package main
 
 import (
+	"flag"
 	"fmt"
+	"log"
 	"os"
+	"syscall"
+	"time"
 )
 
 type NagiosStatusVal int
@@ -30,6 +34,70 @@ var (
 type NagiosStatus struct {
 	Message string
 	Value   NagiosStatusVal
+}
+
+// Main program loop
+func main() {
+	// get our numbers
+	atime, mtime, ctime, err := statTimes(fileFullPath)
+	now := time.Now()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("WORKING")
+	fmt.Println(atime.Before(now))
+	fmt.Println("Now:   ", now)
+	fmt.Println("Atime: ", atime)
+	fmt.Println("END WORK")
+	fmt.Println(mtime)
+	fmt.Println(ctime)
+	fmt.Println(warnTime)
+	fmt.Println(critTime)
+}
+
+// credit to peterSO from http://stackoverflow.com/questions/20875336/how-can-i-get-a-files-ctime-atime-mtime-and-change-them-using-golang
+// for the original function below. It is exactly what was necessary
+func statTimes(name string) (atime, mtime, ctime time.Time, err error) {
+	fi, err := os.Stat(name)
+	if err != nil {
+		return
+	}
+	mtime = fi.ModTime()
+	stat := fi.Sys().(*syscall.Stat_t)
+	atime = time.Unix(int64(stat.Atim.Sec), int64(stat.Atim.Nsec))
+	ctime = time.Unix(int64(stat.Ctim.Sec), int64(stat.Ctim.Nsec))
+	return
+}
+
+// Init loop to set our variables on startup
+
+// Three primary variables used to define our check
+var fileFullPath, timeMode string
+var warnTime, critTime time.Duration
+
+func init() {
+	var warnTimeString, critTimeString string
+	flag.StringVar(&fileFullPath, "f", "", "The full location to the file to be checked")
+	flag.StringVar(&timeMode, "t", "ctime", "Which time stat to use for comparison. [atime|mtime|ctime] (access time, modified time, changed time).")
+	flag.StringVar(&warnTimeString, "w", "24h", "The max age a file can be before triggering a warning")
+	flag.StringVar(&critTimeString, "c", "48h", "The max age a file can be before triggering a critical")
+
+	flag.Parse()
+	var err error
+
+	// check that our time arguments are valid
+	warnTime, err = time.ParseDuration(warnTimeString)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	critTime, err = time.ParseDuration(critTimeString)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 }
 
 // Take a bunch of NagiosStatus pointers and find the highest value, then
