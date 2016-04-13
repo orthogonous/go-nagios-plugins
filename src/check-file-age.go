@@ -39,22 +39,36 @@ type NagiosStatus struct {
 // Main program loop
 func main() {
 	// get our numbers
-	atime, mtime, ctime, err := statTimes(fileFullPath)
+	//atime, mtime, ctime, err := statTimes(fileFullPath)
+	_, mtime, _, err := statTimes(fileFullPath)
 	now := time.Now()
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println("WORKING")
-	fmt.Println(atime.Before(now))
-	fmt.Println("Now:   ", now)
-	fmt.Println("Atime: ", atime)
-	fmt.Println("END WORK")
-	fmt.Println(mtime)
-	fmt.Println(ctime)
-	fmt.Println(warnTime)
-	fmt.Println(critTime)
+	// warnTime is current time - warnDuration
+	warnTime := now.Add(-warnDuration)
+
+	// criTime is current time - critDuration
+	critTime := now.Add(-critDuration)
+
+	// default to OK nagios status
+	baseStatus := &NagiosStatus{fmt.Sprintf("File: %v: OK", fileFullPath), NAGIOS_OK}
+
+	// array of statusus that can grow as needed. Highest severity is selected at the end of the program
+	statuses := make([]*NagiosStatus, 0)
+
+	// if file is older than warnTime
+	if mtime.Before(warnTime) {
+		statuses = append(statuses, &NagiosStatus{fmt.Sprintf("File:  %v is older than %v", fileFullPath, warnDuration), NAGIOS_WARNING})
+	}
+
+	if mtime.Before(critTime) {
+		statuses = append(statuses, &NagiosStatus{fmt.Sprintf("File:  %v is older than %v", fileFullPath, critDuration), NAGIOS_CRITICAL})
+	}
+	baseStatus.Aggregate(statuses)
+	ExitWithStatus(baseStatus)
 }
 
 // credit to peterSO from http://stackoverflow.com/questions/20875336/how-can-i-get-a-files-ctime-atime-mtime-and-change-them-using-golang
@@ -75,7 +89,7 @@ func statTimes(name string) (atime, mtime, ctime time.Time, err error) {
 
 // Three primary variables used to define our check
 var fileFullPath, timeMode string
-var warnTime, critTime time.Duration
+var warnDuration, critDuration time.Duration
 
 func init() {
 	var warnTimeString, critTimeString string
@@ -88,27 +102,25 @@ func init() {
 	var err error
 
 	// check that our time arguments are valid
-	warnTime, err = time.ParseDuration(warnTimeString)
+	warnDuration, err = time.ParseDuration(warnTimeString)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	critTime, err = time.ParseDuration(critTimeString)
+	critDuration, err = time.ParseDuration(critTimeString)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 }
 
-// Take a bunch of NagiosStatus pointers and find the highest value, then
-// combine all the messages. Things win in the order of highest to lowest.
+// Take a bunch of NagiosStatus pointers and find the highest value and alarm on this
 func (status *NagiosStatus) Aggregate(otherStatuses []*NagiosStatus) {
 	for _, s := range otherStatuses {
 		if status.Value < s.Value {
 			status.Value = s.Value
+			status.Message = s.Message
 		}
-
-		status.Message += " - " + s.Message
 	}
 }
 
